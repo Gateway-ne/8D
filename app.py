@@ -2,9 +2,15 @@ import os
 import numpy as np
 from flask import Flask, render_template, request, redirect, url_for, flash
 from pydub import AudioSegment
+from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
-app.secret_key = "secret"  # needed for flash messages
+app.secret_key = os.environ.get("SECRET_KEY", "dev_secret")
+
+UPLOAD_FOLDER = "uploads"
+OUTPUT_FOLDER = "outputs"
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 
 SUPPORTED_FORMATS = (".mp3", ".wav", ".flac", ".ogg", ".aac", ".m4a")
 
@@ -16,7 +22,7 @@ def apply_8d_effect(input_file, output_file, rotation_speed=0.5):
 
     if channels < 2:
         print(f"⚠️ Skipping {input_file}: not stereo")
-        return
+        return None
 
     samples = samples.reshape((-1, channels))
     duration = len(samples) / sample_rate
@@ -37,36 +43,35 @@ def apply_8d_effect(input_file, output_file, rotation_speed=0.5):
     )
 
     base_name = os.path.splitext(os.path.basename(output_file))[0]
-    output_mp3 = os.path.join(os.path.dirname(output_file), f"{base_name}.mp3")
+    output_mp3 = os.path.join(os.path.dirname(output_file), f"{base_name}_8d.mp3")
     new_song.export(output_mp3, format="mp3")
     return output_mp3
 
 @app.route("/", methods=["GET", "POST"])
 def index():
+    converted_files = []
     if request.method == "POST":
-        input_folder = request.form.get("input_folder").strip()
-        output_folder = request.form.get("output_folder").strip()
         rotation_speed = float(request.form.get("rotation_speed", 0.5))
+        uploaded_files = request.files.getlist("files")
 
-        os.makedirs(output_folder, exist_ok=True)
+        for file in uploaded_files:
+            if file and file.filename.lower().endswith(SUPPORTED_FORMATS):
+                filename = secure_filename(file.filename)
+                input_path = os.path.join(UPLOAD_FOLDER, filename)
+                file.save(input_path)
 
-        converted_files = []
-        for file_name in os.listdir(input_folder):
-            if file_name.lower().endswith(SUPPORTED_FORMATS):
-                input_path = os.path.join(input_folder, file_name)
-                output_path = os.path.join(output_folder, file_name)
+                output_path = os.path.join(OUTPUT_FOLDER, filename)
                 try:
                     result = apply_8d_effect(input_path, output_path, rotation_speed)
                     if result:
-                        converted_files.append(result)
+                        converted_files.append(os.path.basename(result))
                 except Exception as e:
-                    flash(f"❌ Skipping {file_name}: {e}")
+                    flash(f"❌ Skipping {filename}: {e}")
 
         flash(f"✅ Conversion complete! {len(converted_files)} files processed.")
-        return redirect(url_for("index"))
+        return render_template("index.html", converted_files=converted_files)
 
-    return render_template("index.html")
+    return render_template("index.html", converted_files=converted_files)
 
-# 👇 This is the missing piece
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=True)
