@@ -16,9 +16,12 @@
 <body>
     <div class="container">
         <h1>🎶 8D Audio Converter</h1>
-        <form method="POST" enctype="multipart/form-data">
-            <label>Select Audio Files:</label>
-            <input type="file" name="files" multiple required>
+        <form method="POST">
+            <label>Input Folder Path:</label>
+            <input type="text" name="input_folder" required>
+
+            <label>Output Folder Path:</label>
+            <input type="text" name="output_folder" required>
 
             <label>Rotation Speed (default 0.5):</label>
             <input type="number" step="0.1" name="rotation_speed">
